@@ -661,3 +661,276 @@ df
 
 ```
 
+## 3. 회귀분석
+
+### 3.1. 회귀분석
+
+```{r}
+gu<- read.csv("gu_data_3.csv")
+
+
+gu<- gu[,c(-1,-2,-12)]
+gu
+
+all_reg<- lm(평당가격 ~ ., data = gu)
+summary(all_reg)
+```
+
+    회귀분석 결과 R -squared 값은 0.6922로 69.22%, p-value는 0.05보다 높은 0.1085로 유의미하지 않은 모델이라고 볼 수 있다.  
+    그래서 두가지 분석을 더 진행하고자 한다. 첫 번째는 접근성 요인(도서관, 버스정류장, 보건기관, 전철역)에 대한 분석을 하고자 한다. 두번째는 후진선택을 통해 유의한 모델을 만들어보고자 한다.
+
+### 3.2. 거리에 따른 평균 평당 매매가 분석 - 가깝게 위치한 시설의 개수
+```{r}
+distance<-read.csv("distance1.csv")
+distance <-read.csv("distance1.csv")
+aptdata0 <- read.csv("APT2021.csv")
+```
+
+#### 3.2.1. 데이터 전처리
+```{r}
+library(plyr)
+apt_dis <- join(aptdata0,distance,by="aptnm")
+apt_dis <- na.omit(apt_dis)
+apt_dis <- apt_dis[,c(2,16:27)]
+apt_dis$price <- gsub(",","",apt_dis$price)
+apt_dis$price <- as.numeric(apt_dis[,1])
+
+boxplot(apt_dis$price) 
+boxplot(apt_dis$price)$stats
+
+apt_dis$price <- ifelse(apt_dis$price <6000 | apt_dis$price > 155500, NA, apt_dis$price)
+apt_dis<- na.omit(apt_dis)
+
+
+```
+
+#### 3.2.2. 다중회귀분석
+```{r}
+regression.count <- lm(price ~number_of_bus_station+number_of_health_ins+number_of_library+number_of_park+number_of_subway,data=apt_dis)
+summary(regression.count)
+```
+
+#### 3.2.3. 표준화 계수값
+```{r}
+library(QuantPsyc)
+lm.beta(regression.count)
+```
+
+#### 3.2.4.모델 결과
+```{r}
+#결과표 출력
+library(sjPlot)
+tab_model(regression.count, show.se=T, show.ci=F, show.stat=T, pred.labels = c("(intercept)","number_of_bus_station","number_of_health_ins","number_of_library","number_of_park","number_of_subway"), dv.labels = c("기관수별 평당가격"), encoding = "EUC-KR")
+
+set_theme(axis.title.size = 1.0, axis.textsize = 1.0)
+plot_model(regression.count, type = "est" , axis.labels = c("(intercept)","number_of_bus_station","number_of_health_ins","number_of_library","number_of_park","number_of_subway"),axis.title="기관수별 평당가격", wrap.labels=5)
+```
+
+#### 3.2.5. 모델 가정 검정
+```{r}
+# 모델 가정 검정
+plot_model(regression.dis, type = "diag")
+
+# 다중공선성 진단
+library(car)
+vif(regression.count)
+```
+
+```
+vif 값이 모두 2를 넘지 않기 때문에 다중공선성이 없다다
+```
+### 3.2. 거리에 따른 평균 평당 매매가 분석 - 최단 거리
+#### 3.2.1. 다중회귀분석
+```{r}
+#다중회귀분석
+regression.dis <- lm(price ~bus_dis+health_dis+library_dis+park_dis+subway_dis,data=apt_dis)
+summary(regression.dis)
+```
+
+#### 3.2.3. 표준화 계수값
+```{r}
+#표준화 계수값
+library(QuantPsyc)
+lm.beta(regression.dis)
+```
+
+
+#### 3.2.4.모델 결과
+```{r}
+#결과표 출력
+library(sjPlot)
+tab_model(regression.dis, show.se=T, show.ci=F, show.stat=T, pred.labels = c("(intercept)","bus_dis","health_dis","library_dis","park_dis","subway_dis"), dv.labels = c("기관 최단거리별 평당가격"), encoding = "EUC-KR")
+
+set_theme(axis.title.size = 1.0, axis.textsize = 1.0)
+plot_model(regression.count, type = "est" , axis.labels = c("(intercept)","bus_dis","health_dis","library_dis","park_dis","subway_dis"),axis.title="기관 최단거리별 평당가격", wrap.labels=5)
+```
+
+#### 3.2.5. 모델 가정 검정
+```{r}
+#가정만족 확인
+plot_model(regression.dis, type = "diag")
+#다중공선성 진단
+library(car)
+vif(regression.dis)
+```
+### 3.3. 사회문화적 요소를 추가한 평균 평당 매매가 분석
+
+#### 3.3.1. 후진 선택법
+
+```{r}
+# 후진 제거 모델 생성
+full<- lm(`평당가격` ~`해당.지역.지하철.지점수`+국립공원수+범죄발생수+유흥업소수+교육기관수+보건기관수+합계_자가용+보유도서합계+여권발급합계+은행합계+미세먼지평균 , data= gu)
+
+# 후진선택 진행
+step2<- step(full, direction="back")
+step2
+```
+
+#### 3.3.2. 후진선택에 따른 회귀모델
+
+```{r}
+# 회귀모델 만들기
+gu_reg<- lm(평당가격 ~ 미세먼지평균 + 여권발급합계 + 해당.지역.지하철.지점수 + 합계_자가용, data = gu)
+
+# 회귀모델
+summary(gu_reg)
+```
+
+-   후진선택법을 통해 나온 독립변수들은 미세먼지평균, 여권발급합계, 해당.지역.지하철.지점수, 합계_자가용으로 다시 살펴보면 R-squared 값은 0.5617로 56.17%, p-value는 0.002504로 할당된 독립변수들 간에 유의한 관계를 지니고 있음을 알 수 있었다.
+
+#### 3.3.3. 다중공선성 진단
+
+```{r message=FALSE, warning=FALSE}
+library(car)
+vif(gu_reg)
+```
+
+-   독립변수들의 다중공선성을 체크하기 위해 vif 함수를 통해 실행해본 결과 각 독립변수에서 10을 넘어가는 변수가 존재하지 않기 때문에 현 분석에서는 다중공선성이 존재하는 독립변수는 없다고 결론 지을 수 있다.
+
+#### 정규성 검정
+
+```{r}
+gu3 <- read.csv("gu_data_3.csv")
+par(mfrow=c(1,2))
+hist(gu3$평당가격, breaks = 10, col = 2)
+hist(gu3$범죄발생수, breaks = 10, col = 2)
+hist(gu3$보건기관수, breaks = 10, col = 2)
+hist(gu3$국립공원수, breaks = 10, col = 2)
+hist(gu3$유흥업소수, breaks = 10, col = 2)
+hist(gu3$교육기관수, breaks = 10, col = 2)
+hist(gu3$해당.지역.지하철.지점수, breaks = 10, col = 2)
+hist(gu3$합계_자가용, breaks = 10, col = 2)
+hist(gu3$도서관.방문자수, breaks = 10, col = 2)
+hist(gu3$은행합계, breaks = 10, col = 2)
+hist(gu3$미세먼지평균, breaks = 10, col = 2)
+
+## 정규성 검정
+shapiro.test(gu3$평당가격) #0.06203
+shapiro.test(gu3$범죄발생수) #0.42
+shapiro.test(gu3$보건기관수) #0.01925
+shapiro.test(gu3$국립공원수) #0.06042
+shapiro.test(gu3$유흥업소수) #0.0009866
+shapiro.test(gu3$교육기관수) #0.1276
+shapiro.test(gu3$해당.지역.지하철.지점수) #0.134
+shapiro.test(gu3$합계_자가용) #0.1333
+shapiro.test(gu3$도서관.방문자수) #0.08765
+shapiro.test(gu3$은행합계) #1.282e-05
+shapiro.test(gu3$미세먼지평균) #0.564
+shapiro.test(gu3$여권발급합계) #0.002425
+
+
+plot_model(gu_reg, type = "diag")
+
+```
+
+#### 3.3.4. 회귀분석 결과
+
+```{r}
+library(sjPlot)
+tab_model(gu_reg, show.se = T, show.ci = F, show.stat = T, auto.label = F, encoding = "EUC-KR")
+```
+
+## 4. 주성분 분석
+
+### 4.1. 전처리
+
+```{r}
+gu<- read.csv("gu_data_3.csv")
+price<- gu$평당가격
+
+# 주성분 분석을 위한 전처리
+rownames(gu)<- gu$지역
+
+# 변수로 필요한 열만 추출해 log 취함.
+apt_pca<- log(gu[,c(8,10,13,15)])
+```
+
+### 4.2. 주성분 분석
+
+```{r}
+pca.out<-prcomp(apt_pca, scale. = T)
+
+biplot(pca.out) # 그래프로 축과 데이터 확인
+screeplot(pca.out, type = "l") # 성분 개수 선택을 위한 그래프 확인
+summary(pca.out) # 정확한 값으로 확인
+pca.out
+```
+
+\*\* PCA 결과 분석 - 그래프를 보면 1에서 3까지는 정보량을 어느정도 가지고 있지만 4부터는 매우 적어지는 것을 알 수 있다.\
+- 더 자세한 값을 확인해보면 PC1: 0.526, PC2:0.2863, PC3: 0.1242, PC4: 0.06357라는 결과가 나왔다.\
+- 따라서, PC3까지 포함해 3개의 성분으로 전체 분산의 81.44%를 설명하는 것을 선택하기로 했다.\
+- PCA 출력 결과에 따르면, 스케일된 값으로 주성분 분석을 진행했기 때문에 하나의 값이 PCA의 결과를 좌우하는 상황은 보이지 않는다.
+
+### 4.3. 기본 회귀모델과 주성분 분석 결과에 따른 회귀모델 성능 비교
+
+#### 4.3.1. 기본회귀모델의 RMSE 구하기
+
+```{r}
+# 기본모델
+og.model<- lm(평당가격 ~ 미세먼지평균 + 여권발급합계 + 해당.지역.지하철.지점수 + 합계_자가용, data = gu)
+
+# 기본 회귀모델의test, train set
+train.og<- gu[1:16, c(8,9,10,13,15)]
+test.og<-gu[17:24, c(8,9,10,13,15)]
+test.og.y<- price[17:24]
+
+# 예측모델
+og.pred<- predict(og.model, newdata = train.og)
+
+# RMSE
+sqrt(mean((og.pred - test.og.y)^2))
+```
+
+#### 4.3.2. 주성분 분석 결과에 따른 회귀모델의 RMSE 구하기
+
+```{r}
+# 전처리
+prc <- as.matrix(apt_pca) %*% pca.out$rotation
+bind.price<- cbind(price, as.data.frame(prc))
+
+# train, test set
+train.prc<- bind.price[1:16,]
+test.prc<- bind.price[17:24,]
+test.prc.y<- price[17:24]
+
+# 회귀모델
+prc.model <- lm(price~PC1+PC2, data = train.prc)
+
+# 예측모델
+pcr.pred<- predict(prc.model, newdata = test.prc)
+
+# RMSE
+sqrt(mean((pcr.pred - test.prc.y)^2))
+```
+
+| 설명            | 기본 모델 | 주성분 분석 결과에 따른 회귀모델 |
+|-----------------|-----------|----------------------------------|
+| 독립변수의 개수 | 4개       | 2개                              |
+| RMSE            | 127.1033  | 65.57483                         |
+
+-   주성분 분석 결과에 따른 모델을 만들어 평균 제곱근 오차를 계산한 결과 65.57483가 나온다. 기본 회귀모델의 결과인 127.1033보다 61.52847 정도 줄어들어 약 절반정도 줄어든 것을 알 수 있다.\
+    기본 회귀모델의 독립변수(전철역 수, 자가용 수, 여권발급 수, 미세먼지) 4개로 설명한 것보다 주성분 분석 결과에 따라 PC1, PC2로 만든 회귀모델이 RMSE가 훨씬 낮기 때문에 성능이 더 좋다고 판단할 수 있다.
+
+# 5.결론
+
+-   초기에 세웠던 '공원, 도서관, 교육기관과 같은 시설의 수가 지역구별 평당 평균 매매가에 영향을 미친다'라는 가설은 만족하지 않았다. 지역구에 있는 기관들의 수에 따라 매매가가 달라질 것이라 예상했지만, 모델도 유의하지 않았고 유의한 영향을 미치는 독립변수 또한 없었다. 따라서 이에 궁금점을 가지고 두 가지 분석을 더 진행하고자 했다. 첫 번째로는 거래된 건물과 시설들의 접근성에 대해 분석했다. 최소 거리와 반경 0.01내에 있는 시설의 수를 따져보았는데, 이 두가지 모두 모델이 유의하지 않았다. 두 번째로는 다른 사회문화적 요인들이 평당 평균 매매가에 영향을 미치는지 살펴보았다. 미세먼지, 여권발급, 전철역의 수, 자가용을 독립변수로 두고 분석을 실행한 결과 유의한 모델이 나왔다.그리고 더 적은 개수의 변수를 이용해 평당 평균 매매가를 예측하고자 주성분분석을 실행했고,PC1, PC2 2개를 선택해 기존 모델보다 RMSE값이 약 절반정도 줄어든 성능 좋은 모델을 만들 수 있었다.
